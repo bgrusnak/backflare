@@ -1,0 +1,74 @@
+import * as jose from 'jose';
+import { routes } from './router.js';
+
+const JWT_SECRET = new TextEncoder().encode('<%= env.JWT_SECRET %>');
+
+export default {
+    async fetch(request, env, ctx) {
+        // Attach environment to the request for easy access in handlers
+        request.env = env;
+
+        // Session handling
+        request.session = {};
+        const cookie = request.headers.get('Cookie');
+        if (cookie && cookie.includes('__session=')) {
+            const jwt = cookie.split('__session=')[1].split(';')[0];
+            try {
+                const { payload } = await jose.jwtVerify(jwt, JWT_SECRET);
+                request.session = payload;
+            } catch (e) {
+                // Invalid JWT, continue with empty session
+                console.error('JWT verification failed:', e.message);
+            }
+        }
+
+        let response;
+        try {
+            const url = new URL(request.url);
+            let handler = null;
+
+            for (const route of routes) {
+                if (request.method !== route.method) continue;
+
+                const match = url.pathname.match(route.regex);
+                if (match) {
+                    request.params = {};
+                    route.paramNames.forEach((name, index) => {
+                        request.params[name] = match[index + 1];
+                    });
+                    handler = route.handler;
+                    break;
+                }
+            }
+
+            if (handler) {
+                response = await handler(request);
+            } else {
+                response = new Response('Not Found.', { status: 404 });
+            }
+
+        } catch (err) {
+            console.error('Unhandled error:', err);
+            response = new Response('Internal Server Error', { status: 500 });
+        }
+
+        // Handle session updates
+        if (request.session?.__new) {
+            delete request.session.__new; // internal flag
+            if (Object.keys(request.session).length === 0) {
+                // Logout: clear the cookie
+                response.headers.append('Set-Cookie', `__session=; HttpOnly; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+            } else {
+                // Login/update: set the cookie
+                const newJwt = await new jose.SignJWT(request.session)
+                    .setProtectedHeader({ alg: 'HS256' })
+                    .setIssuedAt()
+                    .setExpirationTime('24h')
+                    .sign(JWT_SECRET);
+                response.headers.append('Set-Cookie', `__session=${newJwt}; HttpOnly; Path=/; SameSite=Strict; Secure`);
+            }
+        }
+
+        return response;
+    },
+};

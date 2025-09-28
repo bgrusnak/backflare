@@ -1,0 +1,46 @@
+<%_
+const handlerImports = [];
+const routes = [];
+const operationIds = new Set();
+
+for (const path in openapi.paths) {
+    for (const method in openapi.paths[path]) {
+        const op = openapi.paths[path][method];
+        if (op['x-operations']) {
+            const operationId = op.operationId || `${method.toLowerCase()}_${path.replace(/[\/{}]/g, '_')}`;
+            if (!operationIds.has(operationId)) {
+                handlerImports.push(`import { handler as ${operationId} } from './handlers/${operationId}.js';`);
+                operationIds.add(operationId);
+            }
+
+            // Convert OpenAPI path like /users/{id} to a regex like /^\/users\/([^/]+)$/
+            const paramNames = [];
+            const pathRegex = path.replace(/{([^}]+)}/g, (_, paramName) => {
+                paramNames.push(paramName);
+                return '([^/]+)';
+            });
+
+            routes.push({
+                method: method.toUpperCase(),
+                regex: `new RegExp('^${pathRegex.replace(/\//g, '\\/')}$')`,
+                paramNames: JSON.stringify(paramNames),
+                handler: operationId
+            });
+        }
+    }
+}
+_%>
+// Import all generated handlers
+<%- handlerImports.join('\n') %>
+
+// Define all routes
+export const routes = [
+<%_ routes.forEach(route => { _%>
+    {
+        method: '<%= route.method %>',
+        regex: <%- route.regex %>,
+        paramNames: <%- route.paramNames %>,
+        handler: <%- route.handler %>
+    },
+<%_ }) _%>
+];

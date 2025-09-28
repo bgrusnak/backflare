@@ -1,0 +1,130 @@
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+
+x-defaults:
+  d1: "TEST_DB"
+  r2: "TEST_BUCKET"
+  kv: "TEST_KV"
+
+paths:
+  /register:
+    post:
+      summary: Register a new user
+      operationId: registerUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      x-operations:
+        - sql:
+            name: newUser
+            query: "INSERT INTO users (email, password) VALUES (?, ?) RETURNING id"
+            bindings: ["${request.body.email}", "${request.body.password}"]
+      x-response:
+        status: 201
+        body:
+          message: "User created successfully"
+          userId: "${steps.newUser[0].id}"
+  /login:
+    post:
+      summary: Login a user
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: { type: string }
+                password: { type: string }
+      x-operations:
+        - sql:
+            name: foundUser
+            query: "SELECT id FROM users WHERE email = ? AND password = ?"
+            bindings: ["${request.body.email}", "${request.body.password}"]
+        - session:
+            set:
+              userId: "${steps.foundUser[0].id}"
+      x-response:
+        status: 200
+        body: { message: "Login successful" }
+  /logout:
+    post:
+      summary: Logout a user
+      operationId: logoutUser
+      x-operations:
+        - session:
+            set: {}
+      x-response:
+        status: 200
+        body: { message: "Logout successful" }
+  /users/me:
+    get:
+      summary: Get current user info
+      operationId: getMe
+      x-operations:
+        - sql:
+            name: me
+            query: "SELECT id, email FROM users WHERE id = ?"
+            bindings: ["${session.userId}"]
+      x-response:
+        body: "${steps.me[0]}"
+  /files/upload:
+    post:
+      summary: Upload a file
+      operationId: uploadFile
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      x-operations:
+        - files:
+            name: uploadedFile
+            source: "file"
+      x-response:
+        body:
+          message: "File uploaded successfully"
+          key: "${steps.uploadedFile.fullKey}"
+  /kv/{key}:
+    get:
+      summary: Get a value from KV
+      operationId: getKvValue
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+      x-operations:
+        - kv:
+            name: kvValue
+            key: "user-setting:${request.params.key}"
+      x-response:
+        body:
+          key: "${request.params.key}"
+          value: "${steps.kvValue}"
+  /external/posts/{id}:
+    get:
+      summary: Get a post from a public API
+      operationId: getExternalPost
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      x-operations:
+        - request:
+            name: externalPost
+            url: "https://jsonplaceholder.typicode.com/posts/${request.params.id}"
+      x-response:
+        body: "${steps.externalPost.data}"

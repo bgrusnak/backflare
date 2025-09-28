@@ -1,0 +1,22 @@
+name = "backflare-example"
+main = "build/index.js"
+compatibility_date = "2023-10-30"
+type = "module"
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "production-db"
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# R2 Bucket binding
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "production-bucket"
+preview_bucket_name = "staging-bucket"
+
+# KV Namespace binding
+[[kv_namespaces]]
+binding = "KV_USERS"
+id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+preview_id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
