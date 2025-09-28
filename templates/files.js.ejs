@@ -1,0 +1,20 @@
+/**
+ * Uploads a file to an R2 bucket.
+ * @param {R2Bucket} bucket The R2 bucket binding.
+ * @param {string} key The key (filename) for the object in R2.
+ * @param {ReadableStream | ArrayBuffer | string} body The file content.
+ * @param {R2PutOptions} [options] Optional R2 put options.
+ * @returns {Promise<R2Object>} A promise that resolves to the R2 object metadata.
+ */
+export async function uploadFile(bucket, key, body, options) {
+    if (!bucket) {
+        throw new Error('R2 bucket binding is not available.');
+    }
+    try {
+        return await bucket.put(key, body, options);
+    } catch (e) {
+        console.error(`R2 Error: Failed to upload file "${key}"`, e);
+        // Throw a more generic error to avoid leaking implementation details.
+        throw new Error('A file storage error occurred.');
+    }
+}

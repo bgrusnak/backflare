@@ -1,0 +1,21 @@
+/**
+ * Executes a prepared statement against a D1 database.
+ * @param {D1Database} db The D1 database binding.
+ * @param {string} query The SQL query to execute.
+ * @param {Array<any>} bindings An array of values to bind to the query.
+ * @returns {Promise<Array<Object>>} A promise that resolves to an array of results.
+ */
+export async function executeQuery(db, query, bindings = []) {
+    if (!db) {
+        throw new Error('D1 database binding is not available.');
+    }
+    try {
+        const stmt = db.prepare(query).bind(...bindings);
+        const { results } = await stmt.all();
+        return results;
+    } catch (e) {
+        console.error(`D1 Error: Failed to execute query "${query}"`, e);
+        // Throw a more generic error to avoid leaking implementation details.
+        throw new Error('A database error occurred.');
+    }
+}

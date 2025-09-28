@@ -1,0 +1,200 @@
+import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * A helper function to safely resolve nested property paths.
+ * Example: resolve('a.b.c', {a: {b: {c: 1}}}) => 1
+ */
+const resolvePath = (path, obj) => {
+    // Handle cases where the initial object is null or undefined
+    if (obj === null || obj === undefined) {
+        return undefined;
+    }
+    return path.split('.').reduce((prev, curr) => {
+        return prev ? prev[curr] : undefined;
+    }, obj);
+};
+
+/**
+ * A helper function to get values from request, session, or previous steps.
+ * It parses strings like '${request.params.id}' or '${steps.findUser[0].id}'.
+ */
+const getValue = async (value, context) => {
+    if (typeof value !== 'string') {
+        // For objects/arrays, recursively resolve values
+        if (Array.isArray(value)) {
+            return Promise.all(value.map(item => getValue(item, context)));
+        }
+        if (typeof value === 'object' && value !== null) {
+            const newObj = {};
+            for (const key in value) {
+                newObj[key] = await getValue(value[key], context);
+            }
+            return newObj;
+        }
+        return value;
+    }
+
+    // Lazy load request body only when needed
+    if (!context.requestBody && (value.includes('request.body') || value.includes('request.formData'))) {
+        try {
+            const contentType = context.request.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                context.requestBody = await context.request.json();
+            } else if (contentType && contentType.includes('multipart/form-data')) {
+                context.requestBody = await context.request.formData();
+            } else {
+                 context.requestBody = {};
+            }
+        } catch (e) {
+            console.error('Failed to parse request body:', e);
+            context.requestBody = {};
+        }
+    }
+
+    // Replace all placeholders
+    let resolvedValue = value;
+    const placeholders = value.matchAll(/\\${(.*?)}/g);
+    for (const match of placeholders) {
+        const path = match[1];
+        const result = resolvePath(path, context);
+        // If the placeholder is the entire string, return the raw result
+        if (value === `\${${path}}`) {
+            return result;
+        }
+        // Otherwise, stringify and replace
+        resolvedValue = resolvedValue.replace(match[0], result !== undefined ? String(result) : match[0]);
+    }
+
+    return resolvedValue;
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null, // To be populated by getValue if needed
+    };
+
+    try {
+        <% for (const op of operations) { %>
+            <% const opType = Object.keys(op)[0]; %>
+            <% const opConfig = op[opType]; %>
+
+            // Operation: <%= opType %> <%= opConfig.name ? `(as ${opConfig.name})` : '' %>
+            <% if (opType === 'sql') { %>
+            {
+                const dbBinding = context.env['<%= opConfig.database || defaults.d1 %>'];
+                const query = await getValue(<%- JSON.stringify(opConfig.query) %>, context);
+                const bindings = await getValue(<%- JSON.stringify(opConfig.bindings || []) %>, context);
+                const results = await executeQuery(dbBinding, query, bindings);
+                <% if (opConfig.name) { %>
+                    context.steps.<%= opConfig.name %> = results;
+                <% } %>
+            }
+            <% } else if (opType === 'kv') { %>
+            {
+                const kvBinding = context.env['<%= opConfig.namespace || defaults.kv %>'];
+                const key = await getValue(<%- JSON.stringify(opConfig.key) %>, context);
+                <% if ((opConfig.operation || 'get') === 'put') { %>
+                const value = await getValue(<%- JSON.stringify(opConfig.value) %>, context);
+                const options = <%- JSON.stringify(opConfig.options || {}) %>;
+                await putKey(kvBinding, key, value, options);
+                <% } else { %>
+                const result = await getKey(kvBinding, key, '<%= opConfig.readType || 'text' %>');
+                 <% if (opConfig.name) { %>
+                    context.steps.<%= opConfig.name %> = result;
+                <% } %>
+                <% } %>
+            }
+            <% } else if (opType === 'files') { %>
+            {
+                const r2Binding = context.env['<%= opConfig.bucket || defaults.r2 %>'];
+                await getValue('${request.formData}', context);
+                const file = context.requestBody.get('<%= opConfig.source || 'file' %>');
+                if (!file || typeof file === 'string') {
+                    throw new Error('File not found in form data or is not a file.');
+                }
+                <% if (opConfig.key) { %>
+                const key = await getValue(<%- JSON.stringify(opConfig.key) %>, context);
+                <% } else { %>
+                const key = `${uuidv4()}-${file.name}`;
+                <% } %>
+                const result = await uploadFile(r2Binding, key, file.stream(), {
+                    httpMetadata: { contentType: file.type }
+                });
+                <% if (opConfig.name) { %>
+                    context.steps.<%= opConfig.name %> = { ...result, fullKey: key };
+                <% } %>
+            }
+            <% } else if (opType === 'session') { %>
+            {
+                context.session.__new = true; // Mark session for update
+                const dataToSet = await getValue(<%- JSON.stringify(opConfig.set) %>, context);
+                if (Object.keys(dataToSet).length === 0) {
+                     Object.keys(context.session).forEach(key => delete context.session[key]);
+                } else {
+                    for(const key in dataToSet) {
+                        if (dataToSet[key] === null || dataToSet[key] === undefined) {
+                            delete context.session[key];
+                        } else {
+                            context.session[key] = dataToSet[key];
+                        }
+                    }
+                }
+                context.session.__new = true;
+            }
+            <% } else if (opType === 'request') { %>
+            {
+                const url = await getValue(<%- JSON.stringify(opConfig.url) %>, context);
+                const options = {
+                    method: '<%= (opConfig.method || 'GET').toUpperCase() %>',
+                    headers: await getValue(<%- JSON.stringify(opConfig.headers || {}) %>, context),
+                };
+                <% if (opConfig.body) { %>
+                    options.body = await getValue(<%- JSON.stringify(opConfig.body) %>, context);
+                    if (typeof options.body !== 'string') {
+                        options.body = JSON.stringify(options.body);
+                    }
+                <% } %>
+                const response = await fetch(url, options);
+                const result = {
+                    status: response.status,
+                    error: response.status >= 400,
+                    body: await response.text(),
+                    data: null
+                };
+                try {
+                    result.data = JSON.parse(result.body);
+                } catch (e) { /* ignore if body is not json */ }
+                <% if (opConfig.name) { %>
+                    context.steps.<%= opConfig.name %> = result;
+                <% } %>
+            }
+            <% } %>
+        <% } %>
+
+        <% if (xResponse) { %>
+            const responseBody = await getValue(<%- JSON.stringify(xResponse.body) %>, context);
+            const headers = await getValue(<%- JSON.stringify(xResponse.headers || {}) %>, context);
+            const status = <%- xResponse.status || 200 %>;
+
+            const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+            if(typeof responseBody === 'object' && !headers['Content-Type']) {
+                headers['Content-Type'] = 'application/json';
+            }
+
+            return new Response(finalBody, { status, headers });
+        <% } else { %>
+            return new Response(String(Date.now()), { status: 200 });
+        <% } %>
+
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};

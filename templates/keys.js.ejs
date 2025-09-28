@@ -1,0 +1,38 @@
+/**
+ * Retrieves a value from a KV namespace.
+ * @param {KVNamespace} kv The KV namespace binding.
+ * @param {string} key The key to retrieve.
+ * @param {string} type The expected type of the value ('text', 'json', 'arrayBuffer', 'stream').
+ * @returns {Promise<string|object|ArrayBuffer|ReadableStream|null>} The value or null if not found.
+ */
+export async function getKey(kv, key, type = 'text') {
+    if (!kv) {
+        throw new Error('KV namespace binding is not available.');
+    }
+    try {
+        return await kv.get(key, type);
+    } catch (e) {
+        console.error(`KV Error: Failed to get key "${key}"`, e);
+        throw new Error('A key-value storage error occurred.');
+    }
+}
+
+/**
+ * Writes a value to a KV namespace.
+ * @param {KVNamespace} kv The KV namespace binding.
+ * @param {string} key The key to write.
+ * @param {string|ReadableStream|ArrayBuffer|FormData} value The value to store.
+ * @param {object} [options] Optional options, e.g., { expirationTtl: 3600 }.
+ * @returns {Promise<void>}
+ */
+export async function putKey(kv, key, value, options) {
+    if (!kv) {
+        throw new Error('KV namespace binding is not available.');
+    }
+    try {
+        await kv.put(key, value, options);
+    } catch (e) {
+        console.error(`KV Error: Failed to put key "${key}"`, e);
+        throw new Error('A key-value storage error occurred.');
+    }
+}
