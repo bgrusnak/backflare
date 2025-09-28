@@ -131,38 +131,23 @@ export const handler = async (request) => {
     };
 
     try {
-
-
-
-
-            // Operation: kv (as testGet)
-
-            {
+                                    // Operation: kv (as testGet)
+                        {
                 const kvBinding = context.env['TEST_KV'];
                 const key = await getValue("test-key", context);
+                                const result = await getKey(kvBinding, key, 'text');
+                                     context.steps.testGet = result;
+                                            }
+                    const responseBody = await getValue({"message":"Success"}, context);
+        const headers = await getValue({}, context);
+        const status = 200;
 
-                const result = await getKey(kvBinding, key, 'text');
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
 
-                    context.steps.testGet = result;
-
-
-            }
-
-
-
-
-            const responseBody = await getValue({"message":"Success"}, context);
-            const headers = await getValue({}, context);
-            const status = 200;
-
-            const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
-            if(typeof responseBody === 'object' && !headers['Content-Type']) {
-                headers['Content-Type'] = 'application/json';
-            }
-
-            return new Response(finalBody, { status, headers });
-
-
+        return new Response(finalBody, { status, headers });
     } catch (e) {
         console.error('Error in handler:', e.message, e.stack);
         return new Response('Internal Server Error', { status: 500 });

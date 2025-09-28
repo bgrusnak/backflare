@@ -81,37 +81,36 @@ export const handler = async (request) => {
     };
 
     try {
-        <% for (const op of operations) { %>
-            <% const opType = Object.keys(op)[0]; %>
-            <% const opConfig = op[opType]; %>
-
+<% for (const op of operations) { -%>
+            <% const opType = Object.keys(op)[0]; -%>
+            <% const opConfig = op[opType]; -%>
             // Operation: <%= opType %> <%= opConfig.name ? `(as ${opConfig.name})` : '' %>
-            <% if (opType === 'sql') { %>
+            <% if (opType === 'sql') { -%>
             {
                 const dbBinding = context.env['<%= opConfig.database || defaults.d1 %>'];
                 const query = await getValue(<%- JSON.stringify(opConfig.query) %>, context);
                 const bindings = await getValue(<%- JSON.stringify(opConfig.bindings || []) %>, context);
                 const results = await executeQuery(dbBinding, query, bindings);
-                <% if (opConfig.name) { %>
+                <% if (opConfig.name) { -%>
                     context.steps.<%= opConfig.name %> = results;
-                <% } %>
+                <% } -%>
             }
-            <% } else if (opType === 'kv') { %>
+            <% } else if (opType === 'kv') { -%>
             {
                 const kvBinding = context.env['<%= opConfig.namespace || defaults.kv %>'];
                 const key = await getValue(<%- JSON.stringify(opConfig.key) %>, context);
-                <% if ((opConfig.operation || 'get') === 'put') { %>
+                <% if ((opConfig.operation || 'get') === 'put') { -%>
                 const value = await getValue(<%- JSON.stringify(opConfig.value) %>, context);
                 const options = <%- JSON.stringify(opConfig.options || {}) %>;
                 await putKey(kvBinding, key, value, options);
-                <% } else { %>
+                <% } else { -%>
                 const result = await getKey(kvBinding, key, '<%= opConfig.readType || 'text' %>');
-                 <% if (opConfig.name) { %>
+                 <% if (opConfig.name) { -%>
                     context.steps.<%= opConfig.name %> = result;
-                <% } %>
-                <% } %>
+                <% } -%>
+                <% } -%>
             }
-            <% } else if (opType === 'files') { %>
+            <% } else if (opType === 'files') { -%>
             {
                 const r2Binding = context.env['<%= opConfig.bucket || defaults.r2 %>'];
                 await getValue('${request.formData}', context);
@@ -119,19 +118,19 @@ export const handler = async (request) => {
                 if (!file || typeof file === 'string') {
                     throw new Error('File not found in form data or is not a file.');
                 }
-                <% if (opConfig.key) { %>
+                <% if (opConfig.key) { -%>
                 const key = await getValue(<%- JSON.stringify(opConfig.key) %>, context);
-                <% } else { %>
+                <% } else { -%>
                 const key = `${uuidv4()}-${file.name}`;
-                <% } %>
+                <% } -%>
                 const result = await uploadFile(r2Binding, key, file.stream(), {
                     httpMetadata: { contentType: file.type }
                 });
-                <% if (opConfig.name) { %>
+                <% if (opConfig.name) { -%>
                     context.steps.<%= opConfig.name %> = { ...result, fullKey: key };
-                <% } %>
+                <% } -%>
             }
-            <% } else if (opType === 'session') { %>
+            <% } else if (opType === 'session') { -%>
             {
                 context.session.__new = true; // Mark session for update
                 const dataToSet = await getValue(<%- JSON.stringify(opConfig.set) %>, context);
@@ -148,19 +147,19 @@ export const handler = async (request) => {
                 }
                 context.session.__new = true;
             }
-            <% } else if (opType === 'request') { %>
+            <% } else if (opType === 'request') { -%>
             {
                 const url = await getValue(<%- JSON.stringify(opConfig.url) %>, context);
                 const options = {
                     method: '<%= (opConfig.method || 'GET').toUpperCase() %>',
                     headers: await getValue(<%- JSON.stringify(opConfig.headers || {}) %>, context),
                 };
-                <% if (opConfig.body) { %>
+                <% if (opConfig.body) { -%>
                     options.body = await getValue(<%- JSON.stringify(opConfig.body) %>, context);
                     if (typeof options.body !== 'string') {
                         options.body = JSON.stringify(options.body);
                     }
-                <% } %>
+                <% } -%>
                 const response = await fetch(url, options);
                 const result = {
                     status: response.status,
@@ -171,28 +170,26 @@ export const handler = async (request) => {
                 try {
                     result.data = JSON.parse(result.body);
                 } catch (e) { /* ignore if body is not json */ }
-                <% if (opConfig.name) { %>
+                <% if (opConfig.name) { -%>
                     context.steps.<%= opConfig.name %> = result;
-                <% } %>
+                <% } -%>
             }
-            <% } %>
-        <% } %>
+            <% } -%>
+<% } -%>
+<% if (xResponse) { -%>
+        const responseBody = await getValue(<%- JSON.stringify(xResponse.body) %>, context);
+        const headers = await getValue(<%- JSON.stringify(xResponse.headers || {}) %>, context);
+        const status = <%- xResponse.status || 200 %>;
 
-        <% if (xResponse) { %>
-            const responseBody = await getValue(<%- JSON.stringify(xResponse.body) %>, context);
-            const headers = await getValue(<%- JSON.stringify(xResponse.headers || {}) %>, context);
-            const status = <%- xResponse.status || 200 %>;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
 
-            const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
-            if(typeof responseBody === 'object' && !headers['Content-Type']) {
-                headers['Content-Type'] = 'application/json';
-            }
-
-            return new Response(finalBody, { status, headers });
-        <% } else { %>
-            return new Response(String(Date.now()), { status: 200 });
-        <% } %>
-
+        return new Response(finalBody, { status, headers });
+<% } else { -%>
+        return new Response(String(Date.now()), { status: 200 });
+<% } -%>
     } catch (e) {
         console.error('Error in handler:', e.message, e.stack);
         return new Response('Internal Server Error', { status: 500 });

@@ -5,13 +5,18 @@ const toml = require('toml');
 const yaml = require('yaml');
 
 function parseInput(openapiFilePath) {
-    // 1. Load .env file from the current working directory
+    // 1. Load .env file from the current working directory without modifying process.env
     const envPath = path.resolve(process.cwd(), '.env');
-    const envConfig = dotenv.config({ path: envPath });
-    const env = envConfig.parsed || {};
-
-    // Also include existing process.env variables, with .env taking precedence
-    const combinedEnv = { ...process.env, ...env };
+    let envFromFile = {};
+    if (fs.existsSync(envPath)) {
+        try {
+            envFromFile = dotenv.parse(fs.readFileSync(envPath));
+        } catch (e) {
+            console.warn(`Could not parse .env file at ${envPath}`, e);
+        }
+    }
+    // Combine environment variables, giving precedence to the .env file
+    const combinedEnv = { ...process.env, ...envFromFile };
 
     // 2. Load and parse wrangler.toml
     const wranglerPath = path.resolve(process.cwd(), 'wrangler.toml');
