@@ -22,16 +22,16 @@ describe('parser', () => {
         consoleLogSpy.mockRestore();
     });
 
-    it('should correctly parse wrangler.toml and api.yaml', () => {
+    it('should correctly parse wrangler.toml and openapi.yaml', () => {
         // The path to the openapi file is relative to the mocked cwd
-        const config = parseInput('api.yaml');
+        const config = parseInput('openapi.yaml');
 
         // Check wrangler.toml parsing
         expect(config.wrangler).toBeDefined();
         expect(config.wrangler.name).toBe('test-worker');
         expect(config.wrangler.d1_databases[0].binding).toBe('TEST_DB');
 
-        // Check api.yaml parsing
+        // Check openapi.yaml parsing
         expect(config.openapi).toBeDefined();
         expect(config.openapi.info.title).toBe('Test API');
         expect(config.openapi.paths['/register']).toBeDefined();
@@ -47,7 +47,7 @@ describe('parser', () => {
         // Temporarily change cwd to a directory without wrangler.toml
         process.cwd = () => __dirname;
 
-        const config = parseInput('__fixtures__/api.yaml');
+        const config = parseInput('__fixtures__/openapi.yaml');
 
         expect(consoleWarnSpy).toHaveBeenCalledWith('wrangler.toml not found. Bindings will be unavailable.');
         expect(config.openapi.info.title).toBe('Test API');

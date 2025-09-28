@@ -17,7 +17,7 @@ describe('generator', () => {
         consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
 
         // Run generator once for all tests in this suite
-        const config = parseInput('api.yaml');
+        const config = parseInput('openapi.yaml');
         await generate(config);
     });
 

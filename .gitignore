@@ -23,8 +23,3 @@ yarn-error.log*
 
 *.lock
 *lock.json
-
-/.mf
-
-/api.yaml
-/wrangler.toml
