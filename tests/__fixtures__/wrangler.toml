@@ -1,5 +1,7 @@
 name = "test-worker"
 main = "build/index.js"
+compatibility_date = "2023-10-30"
+type = "module"
 
 [[d1_databases]]
 binding = "TEST_DB"

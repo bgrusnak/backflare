@@ -1,22 +1,31 @@
-import { Router } from 'itty-router';
-
 <%_
 const handlerImports = [];
-const operationIds = new Set(); // To avoid duplicate imports for same handler
+const routes = [];
+const operationIds = new Set();
 
-// First, collect all unique operationIds and create import statements.
-// This assumes one handler per operationId.
 for (const path in openapi.paths) {
     for (const method in openapi.paths[path]) {
         const op = openapi.paths[path][method];
-        // Process only if there's an x-operations block
         if (op['x-operations']) {
-            // Use operationId or generate a unique name from method and path
             const operationId = op.operationId || `${method.toLowerCase()}_${path.replace(/[\/{}]/g, '_')}`;
             if (!operationIds.has(operationId)) {
-                 handlerImports.push(`import { handler as ${operationId} } from './handlers/${operationId}.js';`);
-                 operationIds.add(operationId);
+                handlerImports.push(`import { handler as ${operationId} } from './handlers/${operationId}.js';`);
+                operationIds.add(operationId);
             }
+
+            // Convert OpenAPI path like /users/{id} to a regex like /^\/users\/([^/]+)$/
+            const paramNames = [];
+            const pathRegex = path.replace(/{([^}]+)}/g, (_, paramName) => {
+                paramNames.push(paramName);
+                return '([^/]+)';
+            });
+
+            routes.push({
+                method: method.toUpperCase(),
+                regex: `new RegExp('^${pathRegex.replace(/\//g, '\\/')}$')`,
+                paramNames: JSON.stringify(paramNames),
+                handler: operationId
+            });
         }
     }
 }
@@ -24,29 +33,14 @@ _%>
 // Import all generated handlers
 <%- handlerImports.join('\n') %>
 
-const router = Router();
-
-<%_
-// Second, create the routes and connect them to the imported handlers.
-for (const path in openapi.paths) {
-    // Convert OpenAPI path format /users/{id} to itty-router format /users/:id
-    const ittyPath = path.replace(/{/g, ':').replace(/}/g, '');
-    for (const method in openapi.paths[path]) {
-        const op = openapi.paths[path][method];
-        const supportedMethod = method.toLowerCase();
-
-        // Process only if there's an x-operations block and it's a supported HTTP method
-        if (op['x-operations'] && ['get', 'post', 'put', 'delete', 'patch'].includes(supportedMethod)) {
-            const operationId = op.operationId || `${method.toLowerCase()}_${path.replace(/[\/{}]/g, '_')}`;
-_%>
-router.<%= supportedMethod %>('<%= ittyPath %>', <%= operationId %>);
-<%_
-        }
-    }
-}
-_%>
-
-// 404 handler for all other routes
-router.all('*', () => new Response('Not Found.', { status: 404 }));
-
-export { router };
+// Define all routes
+export const routes = [
+<%_ routes.forEach(route => { _%>
+    {
+        method: '<%= route.method %>',
+        regex: <%- route.regex %>,
+        paramNames: <%- route.paramNames %>,
+        handler: <%- route.handler %>
+    },
+<%_ }) _%>
+];

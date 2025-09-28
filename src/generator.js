@@ -51,7 +51,7 @@ async function generate(config) {
         for (const method in paths[pathKey]) {
             const op = paths[pathKey][method];
 
-            if (op['x-operations']) {
+            if (op.hasOwnProperty('x-operations')) {
                 const operationId = op.operationId || `${method.toLowerCase()}_${pathKey.replace(/[\/{}]/g, '_')}`;
 
                 const handlerData = {
@@ -67,7 +67,7 @@ async function generate(config) {
                 const handlerContent = ejs.render(handlerTemplate, handlerData);
                 const handlerOutputPath = path.join(BUILD_DIR, 'handlers', `${operationId}.js`);
                 await fs.promises.writeFile(handlerOutputPath, handlerContent);
-                console.log(`- Generated handler: ${operationId}.js`);
+                console.log(`- Generated handler for ${operationId}`);
             }
         }
     }

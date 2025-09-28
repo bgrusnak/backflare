@@ -1,9 +1,5 @@
-import { Router } from 'itty-router';
 import * as jose from 'jose';
-import { router } from './router.js';
-
-// Re-export the router so wrangler can find it
-export { router };
+import { routes } from './router.js';
 
 const JWT_SECRET = new TextEncoder().encode('<%= env.JWT_SECRET %>');
 
@@ -28,7 +24,29 @@ export default {
 
         let response;
         try {
-            response = await router.handle(request, env, ctx);
+            const url = new URL(request.url);
+            let handler = null;
+
+            for (const route of routes) {
+                if (request.method !== route.method) continue;
+
+                const match = url.pathname.match(route.regex);
+                if (match) {
+                    request.params = {};
+                    route.paramNames.forEach((name, index) => {
+                        request.params[name] = match[index + 1];
+                    });
+                    handler = route.handler;
+                    break;
+                }
+            }
+
+            if (handler) {
+                response = await handler(request);
+            } else {
+                response = new Response('Not Found.', { status: 404 });
+            }
+
         } catch (err) {
             console.error('Unhandled error:', err);
             response = new Response('Internal Server Error', { status: 500 });

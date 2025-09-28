@@ -34,7 +34,7 @@ describe('parser', () => {
         // Check openapi.yaml parsing
         expect(config.openapi).toBeDefined();
         expect(config.openapi.info.title).toBe('Test API');
-        expect(config.openapi.paths['/test']).toBeDefined();
+        expect(config.openapi.paths['/register']).toBeDefined();
     });
 
     it('should throw an error if openapi file does not exist', () => {

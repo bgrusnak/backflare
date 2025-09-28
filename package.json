@@ -28,14 +28,15 @@
     "commander": "^14.0.1",
     "dotenv": "^17.2.2",
     "ejs": "^3.1.10",
-    "itty-router": "^5.0.22",
     "jose": "^6.1.0",
     "toml": "^3.0.0",
     "uuid": "^13.0.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
+    "esbuild": "^0.25.10",
     "jest": "^30.2.0",
+    "miniflare": "^4.20250924.0",
     "wrangler": "^4.40.2"
   }
 }

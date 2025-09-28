@@ -3,72 +3,46 @@ import { uploadFile } from '../files.js';
 import { getKey, putKey } from '../keys.js';
 import { v4 as uuidv4 } from 'uuid';
 
-/**
- * A helper function to safely resolve nested property paths.
- * Example: resolve('a.b.c', {a: {b: {c: 1}}}) => 1
- */
 const resolvePath = (path, obj) => {
-    // Handle cases where the initial object is null or undefined
-    if (obj === null || obj === undefined) {
-        return undefined;
-    }
-    return path.split('.').reduce((prev, curr) => {
-        return prev ? prev[curr] : undefined;
-    }, obj);
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
-/**
- * A helper function to get values from request, session, or previous steps.
- * It parses strings like '${request.params.id}' or '${steps.findUser[0].id}'.
- */
-const getValue = async (value, context) => {
-    if (typeof value !== 'string') {
-        // For objects/arrays, recursively resolve values
-        if (Array.isArray(value)) {
-            return Promise.all(value.map(item => getValue(item, context)));
-        }
-        if (typeof value === 'object' && value !== null) {
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
             const newObj = {};
-            for (const key in value) {
-                newObj[key] = await getValue(value[key], context);
-            }
+            for (const key in path) newObj[key] = getValue(path[key], context);
             return newObj;
         }
-        return value;
+        return path;
     }
 
-    // Lazy load request body only when needed
-    if (!context.requestBody && (value.includes('request.body') || value.includes('request.formData'))) {
-        try {
-            const contentType = context.request.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                context.requestBody = await context.request.json();
-            } else if (contentType && contentType.includes('multipart/form-data')) {
-                context.requestBody = await context.request.formData();
-            } else {
-                 context.requestBody = {};
-            }
-        } catch (e) {
-            console.error('Failed to parse request body:', e);
-            context.requestBody = {};
+    return path.replace(/\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
         }
-    }
-
-    // Replace all placeholders
-    let resolvedValue = value;
-    const placeholders = value.matchAll(/\\${(.*?)}/g);
-    for (const match of placeholders) {
-        const path = match[1];
-        const result = resolvePath(path, context);
-        // If the placeholder is the entire string, return the raw result
-        if (value === `\${${path}}`) {
-            return result;
-        }
-        // Otherwise, stringify and replace
-        resolvedValue = resolvedValue.replace(match[0], result !== undefined ? String(result) : match[0]);
-    }
-
-    return resolvedValue;
+        return result !== undefined ? result : match;
+    });
 };
 
 export const handler = async (request) => {
@@ -77,115 +51,98 @@ export const handler = async (request) => {
         env: request.env,
         session: request.session,
         steps: {},
-        requestBody: null, // To be populated by getValue if needed
+        requestBody: null,
     };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
 
     try {
 <% for (const op of operations) { -%>
-            <% const opType = Object.keys(op)[0]; -%>
-            <% const opConfig = op[opType]; -%>
-            // Operation: <%= opType %> <%= opConfig.name ? `(as ${opConfig.name})` : '' %>
-            <% if (opType === 'sql') { -%>
-            {
-                const dbBinding = context.env['<%= opConfig.database || defaults.d1 %>'];
-                const query = await getValue(<%- JSON.stringify(opConfig.query) %>, context);
-                const bindings = await getValue(<%- JSON.stringify(opConfig.bindings || []) %>, context);
-                const results = await executeQuery(dbBinding, query, bindings);
-                <% if (opConfig.name) { -%>
-                    context.steps.<%= opConfig.name %> = results;
-                <% } -%>
-            }
-            <% } else if (opType === 'kv') { -%>
-            {
-                const kvBinding = context.env['<%= opConfig.namespace || defaults.kv %>'];
-                const key = await getValue(<%- JSON.stringify(opConfig.key) %>, context);
-                <% if ((opConfig.operation || 'get') === 'put') { -%>
-                const value = await getValue(<%- JSON.stringify(opConfig.value) %>, context);
-                const options = <%- JSON.stringify(opConfig.options || {}) %>;
-                await putKey(kvBinding, key, value, options);
-                <% } else { -%>
-                const result = await getKey(kvBinding, key, '<%= opConfig.readType || 'text' %>');
-                 <% if (opConfig.name) { -%>
-                    context.steps.<%= opConfig.name %> = result;
-                <% } -%>
-                <% } -%>
-            }
-            <% } else if (opType === 'files') { -%>
-            {
-                const r2Binding = context.env['<%= opConfig.bucket || defaults.r2 %>'];
-                await getValue('${request.formData}', context);
-                const file = context.requestBody.get('<%= opConfig.source || 'file' %>');
-                if (!file || typeof file === 'string') {
-                    throw new Error('File not found in form data or is not a file.');
-                }
-                <% if (opConfig.key) { -%>
-                const key = await getValue(<%- JSON.stringify(opConfig.key) %>, context);
-                <% } else { -%>
-                const key = `${uuidv4()}-${file.name}`;
-                <% } -%>
-                const result = await uploadFile(r2Binding, key, file.stream(), {
-                    httpMetadata: { contentType: file.type }
-                });
-                <% if (opConfig.name) { -%>
-                    context.steps.<%= opConfig.name %> = { ...result, fullKey: key };
-                <% } -%>
-            }
-            <% } else if (opType === 'session') { -%>
-            {
-                context.session.__new = true; // Mark session for update
-                const dataToSet = await getValue(<%- JSON.stringify(opConfig.set) %>, context);
-                if (Object.keys(dataToSet).length === 0) {
-                     Object.keys(context.session).forEach(key => delete context.session[key]);
-                } else {
-                    for(const key in dataToSet) {
-                        if (dataToSet[key] === null || dataToSet[key] === undefined) {
-                            delete context.session[key];
-                        } else {
-                            context.session[key] = dataToSet[key];
-                        }
-                    }
-                }
-                context.session.__new = true;
-            }
-            <% } else if (opType === 'request') { -%>
-            {
-                const url = await getValue(<%- JSON.stringify(opConfig.url) %>, context);
-                const options = {
-                    method: '<%= (opConfig.method || 'GET').toUpperCase() %>',
-                    headers: await getValue(<%- JSON.stringify(opConfig.headers || {}) %>, context),
-                };
-                <% if (opConfig.body) { -%>
-                    options.body = await getValue(<%- JSON.stringify(opConfig.body) %>, context);
-                    if (typeof options.body !== 'string') {
-                        options.body = JSON.stringify(options.body);
-                    }
-                <% } -%>
-                const response = await fetch(url, options);
-                const result = {
-                    status: response.status,
-                    error: response.status >= 400,
-                    body: await response.text(),
-                    data: null
-                };
-                try {
-                    result.data = JSON.parse(result.body);
-                } catch (e) { /* ignore if body is not json */ }
-                <% if (opConfig.name) { -%>
-                    context.steps.<%= opConfig.name %> = result;
-                <% } -%>
-            }
+        <% const opType = Object.keys(op)[0]; -%>
+        <% const opConfig = op[opType]; -%>
+        // Operation: <%= opType %> <%= opConfig.name ? `(as ${opConfig.name})` : '' %>
+        <% if (opType === 'sql') { -%>
+        {
+            const dbBinding = context.env['<%= opConfig.database || defaults.d1 %>'];
+            const query = getValue(<%- JSON.stringify(opConfig.query) %>, context);
+            const bindings = getValue(<%- JSON.stringify(opConfig.bindings || []) %>, context);
+            const results = await executeQuery(dbBinding, query, bindings);
+            <% if (opConfig.name) { -%>
+                context.steps.<%= opConfig.name %> = results;
             <% } -%>
+        }
+        <% } else if (opType === 'kv') { -%>
+        {
+            const kvBinding = context.env['<%= opConfig.namespace || defaults.kv %>'];
+            const key = getValue(<%- JSON.stringify(opConfig.key) %>, context);
+            <% if ((opConfig.operation || 'get') === 'put') { -%>
+            const value = getValue(<%- JSON.stringify(opConfig.value) %>, context);
+            const options = getValue(<%- JSON.stringify(opConfig.options || {}) %>, context);
+            await putKey(kvBinding, key, value, options);
+            <% } else { -%>
+            const result = await getKey(kvBinding, key, '<%= opConfig.readType || 'text' %>');
+             <% if (opConfig.name) { -%>
+                context.steps.<%= opConfig.name %> = result;
+            <% } -%>
+            <% } -%>
+        }
+        <% } else if (opType === 'files') { -%>
+        {
+            const r2Binding = context.env['<%= opConfig.bucket || defaults.r2 %>'];
+            if (!(context.requestBody instanceof FormData)) throw new Error('Request body is not FormData for file upload.');
+            const file = context.requestBody.get('<%= opConfig.source || 'file' %>');
+            if (!file || typeof file === 'string') throw new Error('File not found in form data.');
+            const key = <%- opConfig.key ? `getValue(${JSON.stringify(opConfig.key)}, context)` : `uuidv4() + '-' + file.name` %>;
+            const result = await uploadFile(r2Binding, key, file.stream(), { httpMetadata: { contentType: file.type } });
+            <% if (opConfig.name) { -%>
+                context.steps.<%= opConfig.name %> = { ...result, fullKey: key };
+            <% } -%>
+        }
+        <% } else if (opType === 'session') { -%>
+        {
+            context.session.__new = true;
+            const dataToSet = getValue(<%- JSON.stringify(opConfig.set) %>, context);
+            if (Object.keys(dataToSet).length === 0) {
+                 Object.keys(context.session).forEach(key => delete context.session[key]);
+            } else {
+                for(const key in dataToSet) {
+                    if (dataToSet[key] === null || dataToSet[key] === undefined) delete context.session[key];
+                    else context.session[key] = dataToSet[key];
+                }
+            }
+        }
+        <% } else if (opType === 'request') { -%>
+        {
+            const url = getValue(<%- JSON.stringify(opConfig.url) %>, context);
+            const headers = getValue(<%- JSON.stringify(opConfig.headers || {}) %>, context);
+            const options = { method: '<%= (opConfig.method || 'GET').toUpperCase() %>', headers };
+            <% if (opConfig.body) { -%>
+            options.body = JSON.stringify(getValue(<%- JSON.stringify(opConfig.body) %>, context));
+            <% } -%>
+            const response = await fetch(url, options);
+            const result = { status: response.status, error: response.status >= 400, body: await response.text(), data: null };
+            try { result.data = JSON.parse(result.body); } catch (e) {}
+            <% if (opConfig.name) { -%>
+                context.steps.<%= opConfig.name %> = result;
+            <% } -%>
+        }
+        <% } -%>
 <% } -%>
 <% if (xResponse) { -%>
-        const responseBody = await getValue(<%- JSON.stringify(xResponse.body) %>, context);
-        const headers = await getValue(<%- JSON.stringify(xResponse.headers || {}) %>, context);
+        const responseBody = getValue(<%- JSON.stringify(xResponse.body) %>, context);
+        const headers = getValue(<%- JSON.stringify(xResponse.headers || {}) %>, context);
         const status = <%- xResponse.status || 200 %>;
-
         const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
         if(typeof responseBody === 'object' && !headers['Content-Type']) {
             headers['Content-Type'] = 'application/json';
         }
-
         return new Response(finalBody, { status, headers });
 <% } else { -%>
         return new Response(String(Date.now()), { status: 200 });

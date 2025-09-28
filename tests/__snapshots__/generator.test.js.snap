@@ -1,6 +1,657 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
-exports[`generator should generate files that match the snapshots: db.js 1`] = `
+exports[`generator should generate handler files that match their snapshots: getExternalPost.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null,
+    };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
+
+    try {
+                        // Operation: request (as externalPost)
+                {
+            const url = getValue("https://jsonplaceholder.typicode.com/posts/\${request.params.id}", context);
+            const headers = getValue({}, context);
+            const options = { method: 'GET', headers };
+                        const response = await fetch(url, options);
+            const result = { status: response.status, error: response.status >= 400, body: await response.text(), data: null };
+            try { result.data = JSON.parse(result.body); } catch (e) {}
+                            context.steps.externalPost = result;
+                    }
+                const responseBody = getValue("\${steps.externalPost.data}", context);
+        const headers = getValue({}, context);
+        const status = 200;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return new Response(finalBody, { status, headers });
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate handler files that match their snapshots: getKvValue.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null,
+    };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
+
+    try {
+                        // Operation: kv (as kvValue)
+                {
+            const kvBinding = context.env['TEST_KV'];
+            const key = getValue("user-setting:\${request.params.key}", context);
+                        const result = await getKey(kvBinding, key, 'text');
+                             context.steps.kvValue = result;
+                                }
+                const responseBody = getValue({"key":"\${request.params.key}","value":"\${steps.kvValue}"}, context);
+        const headers = getValue({}, context);
+        const status = 200;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return new Response(finalBody, { status, headers });
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate handler files that match their snapshots: getMe.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null,
+    };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
+
+    try {
+                        // Operation: sql (as me)
+                {
+            const dbBinding = context.env['TEST_DB'];
+            const query = getValue("SELECT id, email FROM users WHERE id = ?", context);
+            const bindings = getValue(["\${session.userId}"], context);
+            const results = await executeQuery(dbBinding, query, bindings);
+                            context.steps.me = results;
+                    }
+                const responseBody = getValue("\${steps.me[0]}", context);
+        const headers = getValue({}, context);
+        const status = 200;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return new Response(finalBody, { status, headers });
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate handler files that match their snapshots: loginUser.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null,
+    };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
+
+    try {
+                        // Operation: sql (as foundUser)
+                {
+            const dbBinding = context.env['TEST_DB'];
+            const query = getValue("SELECT id FROM users WHERE email = ? AND password = ?", context);
+            const bindings = getValue(["\${request.body.email}","\${request.body.password}"], context);
+            const results = await executeQuery(dbBinding, query, bindings);
+                            context.steps.foundUser = results;
+                    }
+                                // Operation: session
+                {
+            context.session.__new = true;
+            const dataToSet = getValue({"userId":"\${steps.foundUser[0].id}"}, context);
+            if (Object.keys(dataToSet).length === 0) {
+                 Object.keys(context.session).forEach(key => delete context.session[key]);
+            } else {
+                for(const key in dataToSet) {
+                    if (dataToSet[key] === null || dataToSet[key] === undefined) delete context.session[key];
+                    else context.session[key] = dataToSet[key];
+                }
+            }
+        }
+                const responseBody = getValue({"message":"Login successful"}, context);
+        const headers = getValue({}, context);
+        const status = 200;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return new Response(finalBody, { status, headers });
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate handler files that match their snapshots: logoutUser.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null,
+    };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
+
+    try {
+                        // Operation: session
+                {
+            context.session.__new = true;
+            const dataToSet = getValue({}, context);
+            if (Object.keys(dataToSet).length === 0) {
+                 Object.keys(context.session).forEach(key => delete context.session[key]);
+            } else {
+                for(const key in dataToSet) {
+                    if (dataToSet[key] === null || dataToSet[key] === undefined) delete context.session[key];
+                    else context.session[key] = dataToSet[key];
+                }
+            }
+        }
+                const responseBody = getValue({"message":"Logout successful"}, context);
+        const headers = getValue({}, context);
+        const status = 200;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return new Response(finalBody, { status, headers });
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate handler files that match their snapshots: registerUser.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null,
+    };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
+
+    try {
+                        // Operation: sql (as newUser)
+                {
+            const dbBinding = context.env['TEST_DB'];
+            const query = getValue("INSERT INTO users (email, password) VALUES (?, ?) RETURNING id", context);
+            const bindings = getValue(["\${request.body.email}","\${request.body.password}"], context);
+            const results = await executeQuery(dbBinding, query, bindings);
+                            context.steps.newUser = results;
+                    }
+                const responseBody = getValue({"message":"User created successfully","userId":"\${steps.newUser[0].id}"}, context);
+        const headers = getValue({}, context);
+        const status = 201;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return new Response(finalBody, { status, headers });
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate handler files that match their snapshots: uploadFile.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const [source, ...rest] = key.split('.');
+        const subPath = rest.join('.');
+        let result;
+
+        switch (source) {
+            case 'request':
+                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
+                else result = resolvePath(subPath, context.request);
+                break;
+            case 'session':
+                result = resolvePath(subPath, context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[rest[0]];
+                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
+                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
+                } else {
+                    result = stepResult;
+                }
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null,
+    };
+
+    const contentType = request.headers.get('content-type');
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
+    }
+
+    try {
+                        // Operation: files (as uploadedFile)
+                {
+            const r2Binding = context.env['TEST_BUCKET'];
+            if (!(context.requestBody instanceof FormData)) throw new Error('Request body is not FormData for file upload.');
+            const file = context.requestBody.get('file');
+            if (!file || typeof file === 'string') throw new Error('File not found in form data.');
+            const key = uuidv4() + '-' + file.name;
+            const result = await uploadFile(r2Binding, key, file.stream(), { httpMetadata: { contentType: file.type } });
+                            context.steps.uploadedFile = { ...result, fullKey: key };
+                    }
+                const responseBody = getValue({"message":"File uploaded successfully","key":"\${steps.uploadedFile.fullKey}"}, context);
+        const headers = getValue({}, context);
+        const status = 200;
+        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+        if(typeof responseBody === 'object' && !headers['Content-Type']) {
+            headers['Content-Type'] = 'application/json';
+        }
+        return new Response(finalBody, { status, headers });
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate main files that match their snapshots: db.js 1`] = `
 "/**
  * Executes a prepared statement against a D1 database.
  * @param {D1Database} db The D1 database binding.
@@ -24,7 +675,7 @@ export async function executeQuery(db, query, bindings = []) {
 }"
 `;
 
-exports[`generator should generate files that match the snapshots: files.js 1`] = `
+exports[`generator should generate main files that match their snapshots: files.js 1`] = `
 "/**
  * Uploads a file to an R2 bucket.
  * @param {R2Bucket} bucket The R2 bucket binding.
@@ -47,121 +698,9 @@ export async function uploadFile(bucket, key, body, options) {
 }"
 `;
 
-exports[`generator should generate files that match the snapshots: getTest.js 1`] = `
-"import { executeQuery } from '../db.js';
-import { uploadFile } from '../files.js';
-import { getKey, putKey } from '../keys.js';
-import { v4 as uuidv4 } from 'uuid';
-
-/**
- * A helper function to safely resolve nested property paths.
- * Example: resolve('a.b.c', {a: {b: {c: 1}}}) => 1
- */
-const resolvePath = (path, obj) => {
-    // Handle cases where the initial object is null or undefined
-    if (obj === null || obj === undefined) {
-        return undefined;
-    }
-    return path.split('.').reduce((prev, curr) => {
-        return prev ? prev[curr] : undefined;
-    }, obj);
-};
-
-/**
- * A helper function to get values from request, session, or previous steps.
- * It parses strings like '\${request.params.id}' or '\${steps.findUser[0].id}'.
- */
-const getValue = async (value, context) => {
-    if (typeof value !== 'string') {
-        // For objects/arrays, recursively resolve values
-        if (Array.isArray(value)) {
-            return Promise.all(value.map(item => getValue(item, context)));
-        }
-        if (typeof value === 'object' && value !== null) {
-            const newObj = {};
-            for (const key in value) {
-                newObj[key] = await getValue(value[key], context);
-            }
-            return newObj;
-        }
-        return value;
-    }
-
-    // Lazy load request body only when needed
-    if (!context.requestBody && (value.includes('request.body') || value.includes('request.formData'))) {
-        try {
-            const contentType = context.request.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-                context.requestBody = await context.request.json();
-            } else if (contentType && contentType.includes('multipart/form-data')) {
-                context.requestBody = await context.request.formData();
-            } else {
-                 context.requestBody = {};
-            }
-        } catch (e) {
-            console.error('Failed to parse request body:', e);
-            context.requestBody = {};
-        }
-    }
-
-    // Replace all placeholders
-    let resolvedValue = value;
-    const placeholders = value.matchAll(/\\\\\${(.*?)}/g);
-    for (const match of placeholders) {
-        const path = match[1];
-        const result = resolvePath(path, context);
-        // If the placeholder is the entire string, return the raw result
-        if (value === \`\\\${\${path}}\`) {
-            return result;
-        }
-        // Otherwise, stringify and replace
-        resolvedValue = resolvedValue.replace(match[0], result !== undefined ? String(result) : match[0]);
-    }
-
-    return resolvedValue;
-};
-
-export const handler = async (request) => {
-    const context = {
-        request,
-        env: request.env,
-        session: request.session,
-        steps: {},
-        requestBody: null, // To be populated by getValue if needed
-    };
-
-    try {
-                                    // Operation: kv (as testGet)
-                        {
-                const kvBinding = context.env['TEST_KV'];
-                const key = await getValue("test-key", context);
-                                const result = await getKey(kvBinding, key, 'text');
-                                     context.steps.testGet = result;
-                                            }
-                    const responseBody = await getValue({"message":"Success"}, context);
-        const headers = await getValue({}, context);
-        const status = 200;
-
-        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
-        if(typeof responseBody === 'object' && !headers['Content-Type']) {
-            headers['Content-Type'] = 'application/json';
-        }
-
-        return new Response(finalBody, { status, headers });
-    } catch (e) {
-        console.error('Error in handler:', e.message, e.stack);
-        return new Response('Internal Server Error', { status: 500 });
-    }
-};"
-`;
-
-exports[`generator should generate files that match the snapshots: index.js 1`] = `
-"import { Router } from 'itty-router';
-import * as jose from 'jose';
-import { router } from './router.js';
-
-// Re-export the router so wrangler can find it
-export { router };
+exports[`generator should generate main files that match their snapshots: index.js 1`] = `
+"import * as jose from 'jose';
+import { routes } from './router.js';
 
 const JWT_SECRET = new TextEncoder().encode('test-secret-for-jest');
 
@@ -186,7 +725,29 @@ export default {
 
         let response;
         try {
-            response = await router.handle(request, env, ctx);
+            const url = new URL(request.url);
+            let handler = null;
+
+            for (const route of routes) {
+                if (request.method !== route.method) continue;
+
+                const match = url.pathname.match(route.regex);
+                if (match) {
+                    request.params = {};
+                    route.paramNames.forEach((name, index) => {
+                        request.params[name] = match[index + 1];
+                    });
+                    handler = route.handler;
+                    break;
+                }
+            }
+
+            if (handler) {
+                response = await handler(request);
+            } else {
+                response = new Response('Not Found.', { status: 404 });
+            }
+
         } catch (err) {
             console.error('Unhandled error:', err);
             response = new Response('Internal Server Error', { status: 500 });
@@ -214,7 +775,7 @@ export default {
 };"
 `;
 
-exports[`generator should generate files that match the snapshots: keys.js 1`] = `
+exports[`generator should generate main files that match their snapshots: keys.js 1`] = `
 "/**
  * Retrieves a value from a KV namespace.
  * @param {KVNamespace} kv The KV namespace binding.
@@ -255,18 +816,59 @@ export async function putKey(kv, key, value, options) {
 }"
 `;
 
-exports[`generator should generate files that match the snapshots: router.js 1`] = `
-"import { Router } from 'itty-router';
+exports[`generator should generate main files that match their snapshots: router.js 1`] = `
+"// Import all generated handlers
+import { handler as registerUser } from './handlers/registerUser.js';
+import { handler as loginUser } from './handlers/loginUser.js';
+import { handler as logoutUser } from './handlers/logoutUser.js';
+import { handler as getMe } from './handlers/getMe.js';
+import { handler as uploadFile } from './handlers/uploadFile.js';
+import { handler as getKvValue } from './handlers/getKvValue.js';
+import { handler as getExternalPost } from './handlers/getExternalPost.js';
 
-// Import all generated handlers
-import { handler as getTest } from './handlers/getTest.js';
-
-const router = Router();
-
-router.get('/test', getTest);
-
-// 404 handler for all other routes
-router.all('*', () => new Response('Not Found.', { status: 404 }));
-
-export { router };"
+// Define all routes
+export const routes = [
+    {
+        method: 'POST',
+        regex: new RegExp('^\\/register$'),
+        paramNames: [],
+        handler: registerUser
+    },
+    {
+        method: 'POST',
+        regex: new RegExp('^\\/login$'),
+        paramNames: [],
+        handler: loginUser
+    },
+    {
+        method: 'POST',
+        regex: new RegExp('^\\/logout$'),
+        paramNames: [],
+        handler: logoutUser
+    },
+    {
+        method: 'GET',
+        regex: new RegExp('^\\/users\\/me$'),
+        paramNames: [],
+        handler: getMe
+    },
+    {
+        method: 'POST',
+        regex: new RegExp('^\\/files\\/upload$'),
+        paramNames: [],
+        handler: uploadFile
+    },
+    {
+        method: 'GET',
+        regex: new RegExp('^\\/kv\\/([^\\/]+)$'),
+        paramNames: ["key"],
+        handler: getKvValue
+    },
+    {
+        method: 'GET',
+        regex: new RegExp('^\\/external\\/posts\\/([^\\/]+)$'),
+        paramNames: ["id"],
+        handler: getExternalPost
+    },
+];"
 `;

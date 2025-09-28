@@ -9,12 +9,16 @@ describe('generator', () => {
     const buildDir = path.join(fixturesDir, 'build');
     let consoleWarnSpy, consoleLogSpy;
 
-    beforeAll(() => {
+    beforeAll(async () => {
         // Mock process.cwd() to point to our test fixtures directory
         process.cwd = () => fixturesDir;
         // Suppress console output
         consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
         consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
+
+        // Run generator once for all tests in this suite
+        const config = parseInput('openapi.yaml');
+        await generate(config);
     });
 
     afterAll(() => {
@@ -28,11 +32,7 @@ describe('generator', () => {
         }
     });
 
-    it('should generate files that match the snapshots', async () => {
-        const config = parseInput('openapi.yaml');
-        await generate(config);
-
-        // Check that the main files were generated and match their snapshots
+    it('should generate main files that match their snapshots', () => {
         const generatedFiles = ['index.js', 'router.js', 'db.js', 'files.js', 'keys.js'];
         for (const file of generatedFiles) {
             const filePath = path.join(buildDir, file);
@@ -40,11 +40,19 @@ describe('generator', () => {
             const content = fs.readFileSync(filePath, 'utf-8');
             expect(content).toMatchSnapshot(file);
         }
+    });
 
-        // Check that the handler was generated and matches its snapshot
-        const handlerPath = path.join(buildDir, 'handlers', 'getTest.js');
-        expect(fs.existsSync(handlerPath)).toBe(true);
-        const handlerContent = fs.readFileSync(handlerPath, 'utf-8');
-        expect(handlerContent).toMatchSnapshot('getTest.js');
+    it('should generate handler files that match their snapshots', () => {
+        const handlersDir = path.join(buildDir, 'handlers');
+        const handlerFiles = fs.readdirSync(handlersDir);
+
+        // Ensure at least one handler was created
+        expect(handlerFiles.length).toBeGreaterThan(0);
+
+        for (const file of handlerFiles) {
+            const filePath = path.join(handlersDir, file);
+            const content = fs.readFileSync(filePath, 'utf-8');
+            expect(content).toMatchSnapshot(file);
+        }
     });
 });
