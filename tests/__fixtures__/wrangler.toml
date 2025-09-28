@@ -1,0 +1,14 @@
+name = "test-worker"
+main = "build/index.js"
+
+[[d1_databases]]
+binding = "TEST_DB"
+database_name = "test-db"
+
+[[r2_buckets]]
+binding = "TEST_BUCKET"
+bucket_name = "test-bucket"
+
+[[kv_namespaces]]
+binding = "TEST_KV"
+id = "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"

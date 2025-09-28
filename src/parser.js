@@ -5,8 +5,13 @@ const toml = require('toml');
 const yaml = require('yaml');
 
 function parseInput(openapiFilePath) {
-    // 1. Load .env file
-    dotenv.config();
+    // 1. Load .env file from the current working directory
+    const envPath = path.resolve(process.cwd(), '.env');
+    const envConfig = dotenv.config({ path: envPath });
+    const env = envConfig.parsed || {};
+
+    // Also include existing process.env variables, with .env taking precedence
+    const combinedEnv = { ...process.env, ...env };
 
     // 2. Load and parse wrangler.toml
     const wranglerPath = path.resolve(process.cwd(), 'wrangler.toml');
@@ -30,8 +35,7 @@ function parseInput(openapiFilePath) {
     return {
         wrangler: wranglerConfig,
         openapi: openapiSpec,
-        // We can add environment variables if needed later
-        // env: process.env
+        env: combinedEnv,
     };
 }
 

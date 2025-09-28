@@ -2,14 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const ejs = require('ejs');
 
-const BUILD_DIR = path.resolve(process.cwd(), 'build');
-
 const TEMPLATES_DIR = path.resolve(__dirname, '../templates');
 
 // A helper function to render a template and write it to the build directory
-async function renderAndWrite(templateName, data, outputName) {
+async function renderAndWrite(buildDir, templateName, data, outputName) {
     const templatePath = path.join(TEMPLATES_DIR, `${templateName}.ejs`);
-    const outputPath = path.join(BUILD_DIR, outputName || templateName);
+    const outputPath = path.join(buildDir, outputName || templateName);
 
     const template = await fs.promises.readFile(templatePath, 'utf-8');
     const renderedContent = ejs.render(template, data);
@@ -18,6 +16,9 @@ async function renderAndWrite(templateName, data, outputName) {
 }
 
 async function generate(config) {
+    // Resolve BUILD_DIR inside the function to respect mocked process.cwd() in tests
+    const BUILD_DIR = path.resolve(process.cwd(), 'build');
+
     // 1. Ensure the build directory exists and is clean
     if (fs.existsSync(BUILD_DIR)) {
         await fs.promises.rm(BUILD_DIR, { recursive: true, force: true });
@@ -30,15 +31,15 @@ async function generate(config) {
     const globalTemplateData = {
         openapi: config.openapi,
         wrangler: config.wrangler,
-        env: process.env
+        env: config.env
     };
 
     // Generate main files
-    await renderAndWrite('index.js', globalTemplateData);
-    await renderAndWrite('router.js', globalTemplateData);
-    await renderAndWrite('db.js', globalTemplateData);
-    await renderAndWrite('files.js', globalTemplateData);
-    await renderAndWrite('keys.js', globalTemplateData);
+    await renderAndWrite(BUILD_DIR, 'index.js', globalTemplateData);
+    await renderAndWrite(BUILD_DIR, 'router.js', globalTemplateData);
+    await renderAndWrite(BUILD_DIR, 'db.js', globalTemplateData);
+    await renderAndWrite(BUILD_DIR, 'files.js', globalTemplateData);
+    await renderAndWrite(BUILD_DIR, 'keys.js', globalTemplateData);
 
     console.log('Generating route handlers...');
 

@@ -1,0 +1,22 @@
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+
+x-defaults:
+  d1: "TEST_DB"
+  r2: "TEST_BUCKET"
+  kv: "TEST_KV"
+
+paths:
+  /test:
+    get:
+      summary: A test endpoint
+      operationId: getTest
+      x-operations:
+        - kv:
+            name: testGet
+            key: "test-key"
+      x-response:
+        body:
+          message: "Success"

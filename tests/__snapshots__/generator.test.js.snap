@@ -1,0 +1,287 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`generator should generate files that match the snapshots: db.js 1`] = `
+"/**
+ * Executes a prepared statement against a D1 database.
+ * @param {D1Database} db The D1 database binding.
+ * @param {string} query The SQL query to execute.
+ * @param {Array<any>} bindings An array of values to bind to the query.
+ * @returns {Promise<Array<Object>>} A promise that resolves to an array of results.
+ */
+export async function executeQuery(db, query, bindings = []) {
+    if (!db) {
+        throw new Error('D1 database binding is not available.');
+    }
+    try {
+        const stmt = db.prepare(query).bind(...bindings);
+        const { results } = await stmt.all();
+        return results;
+    } catch (e) {
+        console.error(\`D1 Error: Failed to execute query "\${query}"\`, e);
+        // Throw a more generic error to avoid leaking implementation details.
+        throw new Error('A database error occurred.');
+    }
+}"
+`;
+
+exports[`generator should generate files that match the snapshots: files.js 1`] = `
+"/**
+ * Uploads a file to an R2 bucket.
+ * @param {R2Bucket} bucket The R2 bucket binding.
+ * @param {string} key The key (filename) for the object in R2.
+ * @param {ReadableStream | ArrayBuffer | string} body The file content.
+ * @param {R2PutOptions} [options] Optional R2 put options.
+ * @returns {Promise<R2Object>} A promise that resolves to the R2 object metadata.
+ */
+export async function uploadFile(bucket, key, body, options) {
+    if (!bucket) {
+        throw new Error('R2 bucket binding is not available.');
+    }
+    try {
+        return await bucket.put(key, body, options);
+    } catch (e) {
+        console.error(\`R2 Error: Failed to upload file "\${key}"\`, e);
+        // Throw a more generic error to avoid leaking implementation details.
+        throw new Error('A file storage error occurred.');
+    }
+}"
+`;
+
+exports[`generator should generate files that match the snapshots: getTest.js 1`] = `
+"import { executeQuery } from '../db.js';
+import { uploadFile } from '../files.js';
+import { getKey, putKey } from '../keys.js';
+import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * A helper function to safely resolve nested property paths.
+ * Example: resolve('a.b.c', {a: {b: {c: 1}}}) => 1
+ */
+const resolvePath = (path, obj) => {
+    // Handle cases where the initial object is null or undefined
+    if (obj === null || obj === undefined) {
+        return undefined;
+    }
+    return path.split('.').reduce((prev, curr) => {
+        return prev ? prev[curr] : undefined;
+    }, obj);
+};
+
+/**
+ * A helper function to get values from request, session, or previous steps.
+ * It parses strings like '\${request.params.id}' or '\${steps.findUser[0].id}'.
+ */
+const getValue = async (value, context) => {
+    if (typeof value !== 'string') {
+        // For objects/arrays, recursively resolve values
+        if (Array.isArray(value)) {
+            return Promise.all(value.map(item => getValue(item, context)));
+        }
+        if (typeof value === 'object' && value !== null) {
+            const newObj = {};
+            for (const key in value) {
+                newObj[key] = await getValue(value[key], context);
+            }
+            return newObj;
+        }
+        return value;
+    }
+
+    // Lazy load request body only when needed
+    if (!context.requestBody && (value.includes('request.body') || value.includes('request.formData'))) {
+        try {
+            const contentType = context.request.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+                context.requestBody = await context.request.json();
+            } else if (contentType && contentType.includes('multipart/form-data')) {
+                context.requestBody = await context.request.formData();
+            } else {
+                 context.requestBody = {};
+            }
+        } catch (e) {
+            console.error('Failed to parse request body:', e);
+            context.requestBody = {};
+        }
+    }
+
+    // Replace all placeholders
+    let resolvedValue = value;
+    const placeholders = value.matchAll(/\\\\\${(.*?)}/g);
+    for (const match of placeholders) {
+        const path = match[1];
+        const result = resolvePath(path, context);
+        // If the placeholder is the entire string, return the raw result
+        if (value === \`\\\${\${path}}\`) {
+            return result;
+        }
+        // Otherwise, stringify and replace
+        resolvedValue = resolvedValue.replace(match[0], result !== undefined ? String(result) : match[0]);
+    }
+
+    return resolvedValue;
+};
+
+export const handler = async (request) => {
+    const context = {
+        request,
+        env: request.env,
+        session: request.session,
+        steps: {},
+        requestBody: null, // To be populated by getValue if needed
+    };
+
+    try {
+
+
+
+
+            // Operation: kv (as testGet)
+
+            {
+                const kvBinding = context.env['TEST_KV'];
+                const key = await getValue("test-key", context);
+
+                const result = await getKey(kvBinding, key, 'text');
+
+                    context.steps.testGet = result;
+
+
+            }
+
+
+
+
+            const responseBody = await getValue({"message":"Success"}, context);
+            const headers = await getValue({}, context);
+            const status = 200;
+
+            const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
+            if(typeof responseBody === 'object' && !headers['Content-Type']) {
+                headers['Content-Type'] = 'application/json';
+            }
+
+            return new Response(finalBody, { status, headers });
+
+
+    } catch (e) {
+        console.error('Error in handler:', e.message, e.stack);
+        return new Response('Internal Server Error', { status: 500 });
+    }
+};"
+`;
+
+exports[`generator should generate files that match the snapshots: index.js 1`] = `
+"import { Router } from 'itty-router';
+import * as jose from 'jose';
+import { router } from './router.js';
+
+// Re-export the router so wrangler can find it
+export { router };
+
+const JWT_SECRET = new TextEncoder().encode('test-secret-for-jest');
+
+export default {
+    async fetch(request, env, ctx) {
+        // Attach environment to the request for easy access in handlers
+        request.env = env;
+
+        // Session handling
+        request.session = {};
+        const cookie = request.headers.get('Cookie');
+        if (cookie && cookie.includes('__session=')) {
+            const jwt = cookie.split('__session=')[1].split(';')[0];
+            try {
+                const { payload } = await jose.jwtVerify(jwt, JWT_SECRET);
+                request.session = payload;
+            } catch (e) {
+                // Invalid JWT, continue with empty session
+                console.error('JWT verification failed:', e.message);
+            }
+        }
+
+        let response;
+        try {
+            response = await router.handle(request, env, ctx);
+        } catch (err) {
+            console.error('Unhandled error:', err);
+            response = new Response('Internal Server Error', { status: 500 });
+        }
+
+        // Handle session updates
+        if (request.session?.__new) {
+            delete request.session.__new; // internal flag
+            if (Object.keys(request.session).length === 0) {
+                // Logout: clear the cookie
+                response.headers.append('Set-Cookie', \`__session=; HttpOnly; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT\`);
+            } else {
+                // Login/update: set the cookie
+                const newJwt = await new jose.SignJWT(request.session)
+                    .setProtectedHeader({ alg: 'HS256' })
+                    .setIssuedAt()
+                    .setExpirationTime('24h')
+                    .sign(JWT_SECRET);
+                response.headers.append('Set-Cookie', \`__session=\${newJwt}; HttpOnly; Path=/; SameSite=Strict; Secure\`);
+            }
+        }
+
+        return response;
+    },
+};"
+`;
+
+exports[`generator should generate files that match the snapshots: keys.js 1`] = `
+"/**
+ * Retrieves a value from a KV namespace.
+ * @param {KVNamespace} kv The KV namespace binding.
+ * @param {string} key The key to retrieve.
+ * @param {string} type The expected type of the value ('text', 'json', 'arrayBuffer', 'stream').
+ * @returns {Promise<string|object|ArrayBuffer|ReadableStream|null>} The value or null if not found.
+ */
+export async function getKey(kv, key, type = 'text') {
+    if (!kv) {
+        throw new Error('KV namespace binding is not available.');
+    }
+    try {
+        return await kv.get(key, type);
+    } catch (e) {
+        console.error(\`KV Error: Failed to get key "\${key}"\`, e);
+        throw new Error('A key-value storage error occurred.');
+    }
+}
+
+/**
+ * Writes a value to a KV namespace.
+ * @param {KVNamespace} kv The KV namespace binding.
+ * @param {string} key The key to write.
+ * @param {string|ReadableStream|ArrayBuffer|FormData} value The value to store.
+ * @param {object} [options] Optional options, e.g., { expirationTtl: 3600 }.
+ * @returns {Promise<void>}
+ */
+export async function putKey(kv, key, value, options) {
+    if (!kv) {
+        throw new Error('KV namespace binding is not available.');
+    }
+    try {
+        await kv.put(key, value, options);
+    } catch (e) {
+        console.error(\`KV Error: Failed to put key "\${key}"\`, e);
+        throw new Error('A key-value storage error occurred.');
+    }
+}"
+`;
+
+exports[`generator should generate files that match the snapshots: router.js 1`] = `
+"import { Router } from 'itty-router';
+
+// Import all generated handlers
+import { handler as getTest } from './handlers/getTest.js';
+
+const router = Router();
+
+router.get('/test', getTest);
+
+// 404 handler for all other routes
+router.all('*', () => new Response('Not Found.', { status: 404 }));
+
+export { router };"
+`;
