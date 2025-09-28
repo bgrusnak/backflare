@@ -14,7 +14,7 @@ program
 program
   .command('local')
   .description('Generate the worker and run it locally')
-  .option('-f, --file <path>', 'Path to OpenAPI file', 'openapi.yaml')
+  .option('-f, --file <path>', 'Path to OpenAPI file', 'api.yaml')
   .action(async (options) => {
     console.log('Generating code for local development...');
     const config = parseInput(options.file);
@@ -27,7 +27,7 @@ program
 program
   .command('deploy')
   .description('Generate and deploy the worker to Cloudflare')
-  .option('-f, --file <path>', 'Path to OpenAPI file', 'openapi.yaml')
+  .option('-f, --file <path>', 'Path to OpenAPI file', 'api.yaml')
   .action(async (options) => {
     console.log('Generating code for deployment...');
     const config = parseInput(options.file);

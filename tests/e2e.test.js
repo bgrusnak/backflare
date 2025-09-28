@@ -15,7 +15,7 @@ describe('E2E tests for the generated worker', () => {
     beforeAll(async () => {
         process.cwd = () => fixturesDir;
 
-        const config = parseInput('openapi.yaml');
+        const config = parseInput('api.yaml');
         const consoleLogSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
         await generate(config);
