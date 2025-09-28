@@ -1,7 +1,9 @@
 name = "backflare-example"
 main = "build/index.js"
-compatibility_date = "2023-10-30"
-type = "module"
+compatibility_date = "2023-10-30" 
+
+[observability]
+enabled = true
 
 # D1 Database binding
 [[d1_databases]]
