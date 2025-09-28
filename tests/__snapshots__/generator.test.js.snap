@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -22,26 +23,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\\\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\\[(\\d+)\\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\\[(\\d+)\\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -58,12 +75,8 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
+    if (contentType && contentType.includes('application/json')) {
+        try { context.requestBody = await request.json(); } catch (e) {}
     }
 
     try {
@@ -100,6 +113,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -114,26 +128,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\\\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\\[(\\d+)\\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\\[(\\d+)\\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -150,12 +180,8 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
+    if (contentType && contentType.includes('application/json')) {
+        try { context.requestBody = await request.json(); } catch (e) {}
     }
 
     try {
@@ -189,6 +215,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -203,26 +230,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\\\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\\[(\\d+)\\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\\[(\\d+)\\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -239,12 +282,8 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
+    if (contentType && contentType.includes('application/json')) {
+        try { context.requestBody = await request.json(); } catch (e) {}
     }
 
     try {
@@ -279,6 +318,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -293,26 +333,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\\\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\\[(\\d+)\\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\\[(\\d+)\\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -329,12 +385,8 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
+    if (contentType && contentType.includes('application/json')) {
+        try { context.requestBody = await request.json(); } catch (e) {}
     }
 
     try {
@@ -382,6 +434,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -396,26 +449,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\\\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\\[(\\d+)\\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\\[(\\d+)\\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -432,12 +501,8 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
+    if (contentType && contentType.includes('application/json')) {
+        try { context.requestBody = await request.json(); } catch (e) {}
     }
 
     try {
@@ -477,6 +542,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -491,26 +557,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\\\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\\[(\\d+)\\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\\[(\\d+)\\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -527,12 +609,8 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
+    if (contentType && contentType.includes('application/json')) {
+        try { context.requestBody = await request.json(); } catch (e) {}
     }
 
     try {
@@ -567,6 +645,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -581,26 +660,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\\\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\\[(\\d+)\\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\\\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\\[(\\d+)\\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -617,20 +712,16 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
+    if (contentType && contentType.includes('application/json')) {
+        try { context.requestBody = await request.json(); } catch (e) {}
     }
 
     try {
                         // Operation: files (as uploadedFile)
                 {
             const r2Binding = context.env['TEST_BUCKET'];
-            if (!(context.requestBody instanceof FormData)) throw new Error('Request body is not FormData for file upload.');
-            const file = context.requestBody.get('file');
+            const formData = await request.formData();
+            const file = formData.get('file');
             if (!file || typeof file === 'string') throw new Error('File not found in form data.');
             const key = uuidv4() + '-' + file.name;
             const result = await uploadFile(r2Binding, key, file.stream(), { httpMetadata: { contentType: file.type } });

@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const resolvePath = (path, obj) => {
     if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
     return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
 };
 
@@ -19,26 +20,42 @@ const getValue = (path, context) => {
         return path;
     }
 
-    return path.replace(/\${(.*?)}/g, (match, key) => {
+    const singleVarMatch = path.match(/^\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\[(\d+)\]/g, '.$1');
         const [source, ...rest] = key.split('.');
-        const subPath = rest.join('.');
-        let result;
-
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
         switch (source) {
             case 'request':
-                if (rest[0] === 'body') result = resolvePath(rest.slice(1).join('.'), context.requestBody);
-                else result = resolvePath(subPath, context.request);
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\[(\d+)\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
                 break;
             case 'session':
-                result = resolvePath(subPath, context.session);
+                result = resolvePath(rest.join('.'), context.session);
                 break;
             case 'steps':
-                const stepResult = context.steps[rest[0]];
-                if (rest.length > 1 && Array.isArray(stepResult) && stepResult.length > 0) {
-                    result = resolvePath(rest.slice(1).join('.'), stepResult[0]);
-                } else {
-                    result = stepResult;
-                }
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
                 break;
         }
         return result !== undefined ? result : match;
@@ -96,7 +113,7 @@ export const handler = async (request) => {
         <% } else if (opType === 'files') { -%>
         {
             const r2Binding = context.env['<%= opConfig.bucket || defaults.r2 %>'];
-            if (!(context.requestBody instanceof FormData)) throw new Error('Request body is not FormData for file upload.');
+            if (typeof context.requestBody?.get !== 'function') throw new Error('Request body is not FormData for file upload.');
             const file = context.requestBody.get('<%= opConfig.source || 'file' %>');
             if (!file || typeof file === 'string') throw new Error('File not found in form data.');
             const key = <%- opConfig.key ? `getValue(${JSON.stringify(opConfig.key)}, context)` : `uuidv4() + '-' + file.name` %>;
@@ -129,6 +146,16 @@ export const handler = async (request) => {
             const response = await fetch(url, options);
             const result = { status: response.status, error: response.status >= 400, body: await response.text(), data: null };
             try { result.data = JSON.parse(result.body); } catch (e) {}
+            <% if (opConfig.name) { -%>
+                context.steps.<%= opConfig.name %> = result;
+            <% } -%>
+        }
+        <% } else if (opType === 'code') { -%>
+        {
+            const { request, env, session, steps, requestBody } = context;
+            const result = await (async () => {
+                <%- opConfig.js %>
+            })();
             <% if (opConfig.name) { -%>
                 context.steps.<%= opConfig.name %> = result;
             <% } -%>
