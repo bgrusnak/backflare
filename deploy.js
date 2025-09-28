@@ -45,7 +45,7 @@ program
 program
   .command('deploy')
   .description('Generate and deploy the worker to Cloudflare')
-  .option('-f, --file <path>', 'Path to OpenAPI file', 'openapi.yaml')
+  .option('-f, --file <path>', 'Path to OpenAPI file', 'api.yaml')
   .option('--sql <path>', 'Path to SQL file for DB initialization', 'init.sql')
   .action(async (options) => {
     console.log('Generating code for deployment...');

@@ -1,7 +1,7 @@
 {
-  "name": "app",
-  "version": "1.0.0",
-  "description": "",
+  "name": "backflare",
+  "version": "0.1.0",
+  "description": "The unified backend generator for Cloudflare Workers",
   "main": "index.js",
   "bin": {
     "backflare": "deploy.js"
@@ -9,8 +9,7 @@
   "directories": {
     "example": "examples"
   },
-  "scripts": {
-    "test": "jest"
+  "scripts": { 
   },
   "repository": {
     "type": "git",
@@ -18,7 +17,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "type": "commonjs",
   "bugs": {
     "url": "https://github.com/bgrusnak/backflare/issues"

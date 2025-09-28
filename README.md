@@ -40,7 +40,7 @@ Based on these inputs, the tool generates a complete Cloudflare Worker project i
     ```
 
 3.  **Configure your backend:**
-    *   Copy `examples/openapi.yaml` to the root of your project. This will be your main API definition file.
+    *   Copy `examples/api.yaml` to the root of your project. This will be your main API definition file.
     *   Copy `examples/wrangler.toml` to the root and replace the placeholder IDs with your actual Cloudflare resource IDs.
     *   Copy `examples/.env.example` to `.env` and change `JWT_SECRET` to a secure, random string.
 
@@ -59,9 +59,9 @@ Based on these inputs, the tool generates a complete Cloudflare Worker project i
 ## CLI Commands
 
 - `backflare local [-f <file>]`: Generates the worker and runs it locally.
-  - `-f, --file <path>`: Path to the OpenAPI file. Defaults to `openapi.yaml`.
+  - `-f, --file <path>`: Path to the OpenAPI file. Defaults to `api.yaml`.
 - `backflare deploy [-f <file>]`: Generates and deploys the worker.
-  - `-f, --file <path>`: Path to the OpenAPI file. Defaults to `openapi.yaml`.
+  - `-f, --file <path>`: Path to the OpenAPI file. Defaults to `api.yaml`.
 
 ## OpenAPI Extensions Reference
 
@@ -190,4 +190,4 @@ You can dynamically access data from different contexts within your operations u
 - `${steps.<action_name>.*}`: Results from previous named operations.
 
 ---
-This project is licensed under the ISC License.
+This project is licensed under the MIT License.
