@@ -1,4 +1,4 @@
-const { Miniflare } = require('miniflare');
+const { Miniflare, createFetchMock } = require('miniflare');
 const { generate } = require('../src/generator');
 const { parseInput } = require('../src/parser');
 const path = require('path');
@@ -29,6 +29,12 @@ describe('E2E tests for the generated worker', () => {
             format: 'esm',
         });
 
+        const fetchMock = createFetchMock();
+        fetchMock.disableNetConnect();
+        fetchMock.get('https://jsonplaceholder.typicode.com').intercept({
+            path: '/posts/1'
+        }).reply(200, { id: 1, title: 'Mocked Post' });
+
         mf = new Miniflare({
             scriptPath: path.join(buildDir, 'bundled.js'),
             modules: true,
@@ -37,13 +43,8 @@ describe('E2E tests for the generated worker', () => {
             r2Buckets: { "TEST_BUCKET": "test-r2-bucket" },
             bindings: { JWT_SECRET: config.env.JWT_SECRET },
             d1Persist: true,
+            fetchMock,
         });
-
-        // Mock the external API call
-        const fetchMock = await mf.getFetchMock();
-        fetchMock.get('https://jsonplaceholder.typicode.com').intercept({
-            path: '/posts/1'
-        }).reply(200, { id: 1, title: 'Mocked Post' });
 
         // Initialize DB
         const db = await mf.getD1Database('TEST_DB');
@@ -100,9 +101,16 @@ describe('E2E tests for the generated worker', () => {
     test('POST /files/upload should upload a file to R2', async () => {
         const formData = new FormData();
         formData.append('file', new Blob(['test content']), 'test.txt');
+
+        // Create a temporary request to generate the multipart/form-data header with boundary
+        const tempReq = new Request('http://localhost', { method: 'POST', body: formData });
+
         const res = await mf.dispatchFetch('http://localhost/files/upload', {
             method: 'POST',
-            headers: { Cookie: sessionCookie },
+            headers: {
+                'Content-Type': tempReq.headers.get('Content-Type'),
+                'Cookie': sessionCookie,
+            },
             body: formData,
         });
         expect(res.status).toBe(200);
