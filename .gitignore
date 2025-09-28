@@ -27,3 +27,5 @@ yarn-error.log*
 /.mf
 /api.yaml
 /wrangler.toml
+/init.sql
+/.wrangler

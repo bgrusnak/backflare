@@ -7,11 +7,11 @@ DROP TABLE IF EXISTS Users;
 -- Create a simple 'Users' table
 CREATE TABLE Users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
+    password TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Insert some sample data
-INSERT INTO Users (name, email) VALUES ('Alice', 'alice@example.com');
-INSERT INTO Users (name, email) VALUES ('Bob', 'bob@example.com');
+INSERT INTO Users (password, email) VALUES ('Alice', 'alice@example.com');
+INSERT INTO Users (password, email) VALUES ('Bob', 'bob@example.com');
