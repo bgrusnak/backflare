@@ -15,7 +15,8 @@ export default {
             const jwt = cookie.split('__session=')[1].split(';')[0];
             try {
                 const { payload } = await jose.jwtVerify(jwt, JWT_SECRET);
-                request.session = payload;
+                // We create a shallow copy to make the session object mutable
+                request.session = { ...payload };
             } catch (e) {
                 // Invalid JWT, continue with empty session
                 console.error('JWT verification failed:', e.message);
