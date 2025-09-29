@@ -1,0 +1,58 @@
+export const resolvePath = (path, obj) => {
+    if (obj === null || obj === undefined) return undefined;
+    if (path === '') return obj;
+    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
+};
+
+export const getValue = (path, context) => {
+    if (typeof path !== 'string') {
+        if (Array.isArray(path)) return path.map(item => getValue(item, context));
+        if (typeof path === 'object' && path !== null) {
+            const newObj = {};
+            for (const key in path) newObj[key] = getValue(path[key], context);
+            return newObj;
+        }
+        return path;
+    }
+
+    const singleVarMatch = path.match(/^\${(.*?)}$/);
+    if (singleVarMatch) {
+        const key = singleVarMatch[1].replace(/\[(\d+)\]/g, '.$1');
+        const [source, ...rest] = key.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
+                return resolvePath(rest.join('.'), context.request);
+            case 'session':
+                return resolvePath(rest.join('.'), context.session);
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                return resolvePath(subPath, stepResult);
+        }
+        return undefined;
+    }
+
+    return path.replace(/\${(.*?)}/g, (match, key) => {
+        const normalizedKey = key.replace(/\[(\d+)\]/g, '.$1');
+        const [source, ...rest] = normalizedKey.split('.');
+        const stepName = rest[0];
+        const subPath = rest.slice(1).join('.');
+        let result;
+        switch (source) {
+            case 'request':
+                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
+                else result = resolvePath(rest.join('.'), context.request);
+                break;
+            case 'session':
+                result = resolvePath(rest.join('.'), context.session);
+                break;
+            case 'steps':
+                const stepResult = context.steps[stepName];
+                result = resolvePath(subPath, stepResult);
+                break;
+        }
+        return result !== undefined ? result : match;
+    });
+};

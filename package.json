@@ -10,13 +10,21 @@
     "example": "examples"
   },
   "scripts": {
-    "test": "jest"
+    "start": "npm link"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bgrusnak/backflare.git"
   },
-  "keywords": [],
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "backend",
+    "d1",
+    "kv",
+    "r2",
+    "headless"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
@@ -28,7 +36,7 @@
     "commander": "^14.0.1",
     "dotenv": "^17.2.2",
     "ejs": "^3.1.10",
-    "jose": "^6.1.0",
+    "jsonwebtoken": "^9.0.2",
     "toml": "^3.0.0",
     "uuid": "^13.0.0",
     "yaml": "^2.8.1"

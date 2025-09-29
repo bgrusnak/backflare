@@ -40,6 +40,7 @@ async function generate(config) {
     await renderAndWrite(BUILD_DIR, 'db.js', globalTemplateData);
     await renderAndWrite(BUILD_DIR, 'files.js', globalTemplateData);
     await renderAndWrite(BUILD_DIR, 'keys.js', globalTemplateData);
+    await renderAndWrite(BUILD_DIR, 'utils.js', globalTemplateData);
 
     console.log('Generating route handlers...');
 
@@ -62,8 +63,7 @@ async function generate(config) {
                         r2: defaults?.r2,
                         kv: defaults?.kv
                     }
-                };
-
+                }; 
                 const handlerContent = ejs.render(handlerTemplate, handlerData);
                 const handlerOutputPath = path.join(BUILD_DIR, 'handlers', `${operationId}.js`);
                 await fs.promises.writeFile(handlerOutputPath, handlerContent);

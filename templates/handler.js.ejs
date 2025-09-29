@@ -2,99 +2,25 @@ import { executeQuery } from '../db.js';
 import { uploadFile } from '../files.js';
 import { getKey, putKey } from '../keys.js';
 import { v4 as uuidv4 } from 'uuid';
+import jwt from "jsonwebtoken";
+import {getValue} from '../utils.js'
 
-const resolvePath = (path, obj) => {
-    if (obj === null || obj === undefined) return undefined;
-    if (path === '') return obj;
-    return path.split('.').reduce((prev, curr) => (prev ? prev[curr] : undefined), obj);
-};
-
-const getValue = (path, context) => {
-    if (typeof path !== 'string') {
-        if (Array.isArray(path)) return path.map(item => getValue(item, context));
-        if (typeof path === 'object' && path !== null) {
-            const newObj = {};
-            for (const key in path) newObj[key] = getValue(path[key], context);
-            return newObj;
-        }
-        return path;
-    }
-
-    const singleVarMatch = path.match(/^\${(.*?)}$/);
-    if (singleVarMatch) {
-        const key = singleVarMatch[1].replace(/\[(\d+)\]/g, '.$1');
-        const [source, ...rest] = key.split('.');
-        const stepName = rest[0];
-        const subPath = rest.slice(1).join('.');
-        switch (source) {
-            case 'request':
-                if (stepName === 'body') return resolvePath(subPath, context.requestBody);
-                return resolvePath(rest.join('.'), context.request);
-            case 'session':
-                return resolvePath(rest.join('.'), context.session);
-            case 'steps':
-                const stepResult = context.steps[stepName];
-                return resolvePath(subPath, stepResult);
-        }
-        return undefined;
-    }
-
-    return path.replace(/\${(.*?)}/g, (match, key) => {
-        const normalizedKey = key.replace(/\[(\d+)\]/g, '.$1');
-        const [source, ...rest] = normalizedKey.split('.');
-        const stepName = rest[0];
-        const subPath = rest.slice(1).join('.');
-        let result;
-        switch (source) {
-            case 'request':
-                if (stepName === 'body') result = resolvePath(subPath, context.requestBody);
-                else result = resolvePath(rest.join('.'), context.request);
-                break;
-            case 'session':
-                result = resolvePath(rest.join('.'), context.session);
-                break;
-            case 'steps':
-                const stepResult = context.steps[stepName];
-                result = resolvePath(subPath, stepResult);
-                break;
-        }
-        return result !== undefined ? result : match;
-    });
-};
-
-export const handler = async (request) => {
-    const context = {
-        request,
-        env: request.env,
-        session: request.session,
-        steps: {},
-        requestBody: null,
-    };
-
-    const contentType = request.headers.get('content-type');
-    if (contentType) {
-        if (contentType.includes('application/json')) {
-            try { context.requestBody = await request.json(); } catch (e) {}
-        } else if (contentType.includes('multipart/form-data')) {
-            try { context.requestBody = await request.formData(); } catch (e) {}
-        }
-    }
-
-    try {
+export const handler = async (rawRequest) => {
+    const context = {...rawRequest, body: rawRequest.requestBody, steps: {}}
+    const request = {...rawRequest, body: rawRequest.requestBody};
+    const session = context.session;
+   <%  let updateSession = false; -%>
+    try { 
 <% for (const op of operations) { -%>
         <% const opType = Object.keys(op)[0]; -%>
-        <% const opConfig = op[opType]; -%>
+        <% const opConfig = op[opType]; -%> 
         // Operation: <%= opType %> <%= opConfig.name ? `(as ${opConfig.name})` : '' %>
         <% if (opType === 'sql') { -%>
-        {
-            const dbBinding = context.env['<%= opConfig.database || defaults.d1 %>'];
-            const query = getValue(<%- JSON.stringify(opConfig.query) %>, context);
-            const bindings = getValue(<%- JSON.stringify(opConfig.bindings || []) %>, context);
-            const results = await executeQuery(dbBinding, query, bindings);
-            <% if (opConfig.name) { -%>
-                context.steps.<%= opConfig.name %> = results;
-            <% } -%>
-        }
+        <% if (opConfig.name) { -%>
+context.steps.<%= opConfig.name %> = await executeQuery(context.env.<%= opConfig.database || defaults.d1 %>, <%- JSON.stringify(opConfig.query) %>, [<%- opConfig.bindings %>]);
+        <% } else { -%>
+await executeQuery(context.env.<%= opConfig.database || defaults.d1 %>, <%- JSON.stringify(opConfig.query) %>, [<%- opConfig.bindings %>]);
+        <% } -%>
         <% } else if (opType === 'kv') { -%>
         {
             const kvBinding = context.env['<%= opConfig.namespace || defaults.kv %>'];
@@ -122,19 +48,16 @@ export const handler = async (request) => {
                 context.steps.<%= opConfig.name %> = { ...result, fullKey: key };
             <% } -%>
         }
-        <% } else if (opType === 'session') { -%>
-        {
-            context.session.__new = true;
-            const dataToSet = getValue(<%- JSON.stringify(opConfig.set) %>, context);
-            if (Object.keys(dataToSet).length === 0) {
-                 Object.keys(context.session).forEach(key => delete context.session[key]);
-            } else {
-                for(const key in dataToSet) {
-                    if (dataToSet[key] === null || dataToSet[key] === undefined) delete context.session[key];
-                    else context.session[key] = dataToSet[key];
-                }
-            }
-        }
+        <% } else if (opType === 'session') { updateSession=true; -%> 
+            <%   if (opConfig.clear !== undefined) {  -%>
+context.session= {};
+            <% } else  { -%>
+            <%   const keys = Object.keys(opConfig.set); for(const key of keys) {
+            -%>
+context.session.<%- key %> = context.<%- opConfig.set[key] %>
+            <% } -%>
+            <% } -%>
+                    
         <% } else if (opType === 'request') { -%>
         {
             const url = getValue(<%- JSON.stringify(opConfig.url) %>, context);
@@ -153,7 +76,7 @@ export const handler = async (request) => {
         <% } else if (opType === 'code') { -%>
         {
             const { request, env, session, steps, requestBody } = context;
-            const result = await (async () => {
+            const result = await (async (context) => {
                 <%- opConfig.js %>
             })();
             <% if (opConfig.name) { -%>
@@ -164,15 +87,31 @@ export const handler = async (request) => {
 <% } -%>
 <% if (xResponse) { -%>
         const responseBody = getValue(<%- JSON.stringify(xResponse.body) %>, context);
-        const headers = getValue(<%- JSON.stringify(xResponse.headers || {}) %>, context);
-        const status = <%- xResponse.status || 200 %>;
-        const finalBody = typeof responseBody === 'object' ? JSON.stringify(responseBody) : String(responseBody);
-        if(typeof responseBody === 'object' && !headers['Content-Type']) {
-            headers['Content-Type'] = 'application/json';
-        }
-        return new Response(finalBody, { status, headers });
+        <% if (xResponse.headers) { -%>
+        const headers = getValue(<%- JSON.stringify(xResponse.headers ) %>, context);
 <% } else { -%>
-        return new Response(String(Date.now()), { status: 200 });
+    const headers ={};
+<% } -%>
+ <%   if (updateSession) {  -%>
+            if (Object.keys(context.session).length === 0) {
+                // Logout: clear the cookie
+                headers['Set-Cookie']= `__session=; HttpOnly; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+            } else {
+                // Login/update: set the cookie
+                const newJwt = jwt.sign(context.session, context.env.JWT_SECRET, context.session.exp ? {}: { expiresIn: "24h" } );
+                 headers['Set-Cookie']=  `__session=${newJwt}; HttpOnly; Path=/; SameSite=Strict; Secure`;
+            }
+        
+<% } -%>
+        const status = <%- xResponse.status || 200 %>;
+        <% if ( typeof responseBody === 'object') { -%>
+        const finalBody =  String(responseBody); 
+        <% } else { -%>
+        const finalBody =  JSON.stringify(responseBody);
+<% } -%>
+        return new Response(finalBody, { status, headers, session: context.session });
+<% } else { -%>
+        return new Response(String(Date.now()), { status: 200, headers, session: context.session });
 <% } -%>
     } catch (e) {
         console.error('Error in handler:', e.message, e.stack);
