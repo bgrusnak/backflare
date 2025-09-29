@@ -75,8 +75,12 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-        try { context.requestBody = await request.json(); } catch (e) {}
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
     }
 
     try {
@@ -180,8 +184,12 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-        try { context.requestBody = await request.json(); } catch (e) {}
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
     }
 
     try {
@@ -282,8 +290,12 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-        try { context.requestBody = await request.json(); } catch (e) {}
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
     }
 
     try {
@@ -385,8 +397,12 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-        try { context.requestBody = await request.json(); } catch (e) {}
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
     }
 
     try {
@@ -398,7 +414,7 @@ export const handler = async (request) => {
             const results = await executeQuery(dbBinding, query, bindings);
                             context.steps.foundUser = results;
                     }
-                                // Operation: session
+                                // Operation: session 
                 {
             context.session.__new = true;
             const dataToSet = getValue({"userId":"\${steps.foundUser[0].id}"}, context);
@@ -501,12 +517,16 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-        try { context.requestBody = await request.json(); } catch (e) {}
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
     }
 
     try {
-                        // Operation: session
+                        // Operation: session 
                 {
             context.session.__new = true;
             const dataToSet = getValue({}, context);
@@ -609,8 +629,12 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-        try { context.requestBody = await request.json(); } catch (e) {}
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
     }
 
     try {
@@ -712,16 +736,20 @@ export const handler = async (request) => {
     };
 
     const contentType = request.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-        try { context.requestBody = await request.json(); } catch (e) {}
+    if (contentType) {
+        if (contentType.includes('application/json')) {
+            try { context.requestBody = await request.json(); } catch (e) {}
+        } else if (contentType.includes('multipart/form-data')) {
+            try { context.requestBody = await request.formData(); } catch (e) {}
+        }
     }
 
     try {
                         // Operation: files (as uploadedFile)
                 {
             const r2Binding = context.env['TEST_BUCKET'];
-            const formData = await request.formData();
-            const file = formData.get('file');
+            if (typeof context.requestBody?.get !== 'function') throw new Error('Request body is not FormData for file upload.');
+            const file = context.requestBody.get('file');
             if (!file || typeof file === 'string') throw new Error('File not found in form data.');
             const key = uuidv4() + '-' + file.name;
             const result = await uploadFile(r2Binding, key, file.stream(), { httpMetadata: { contentType: file.type } });
@@ -795,6 +823,21 @@ import { routes } from './router.js';
 
 const JWT_SECRET = new TextEncoder().encode('test-secret-for-jest');
 
+const shouldUseSecureCookies = (request) => {
+    const forwardedProto = request.headers.get('x-forwarded-proto');
+    if (forwardedProto) {
+        const proto = forwardedProto.split(',')[0].trim().toLowerCase();
+        if (proto) return proto === 'https';
+    }
+
+    try {
+        const url = new URL(request.url);
+        return url.protocol === 'https:';
+    } catch (e) {
+        return true;
+    }
+};
+
 export default {
     async fetch(request, env, ctx) {
         // Attach environment to the request for easy access in handlers
@@ -807,7 +850,8 @@ export default {
             const jwt = cookie.split('__session=')[1].split(';')[0];
             try {
                 const { payload } = await jose.jwtVerify(jwt, JWT_SECRET);
-                request.session = payload;
+                // We create a shallow copy to make the session object mutable
+                request.session = { ...payload };
             } catch (e) {
                 // Invalid JWT, continue with empty session
                 console.error('JWT verification failed:', e.message);
@@ -847,9 +891,12 @@ export default {
         // Handle session updates
         if (request.session?.__new) {
             delete request.session.__new; // internal flag
+            const secureCookie = shouldUseSecureCookies(request);
+            const secureAttr = secureCookie ? '; Secure' : '';
+
             if (Object.keys(request.session).length === 0) {
                 // Logout: clear the cookie
-                response.headers.append('Set-Cookie', \`__session=; HttpOnly; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT\`);
+                response.headers.append('Set-Cookie', \`__session=; HttpOnly; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT\${secureAttr}\`);
             } else {
                 // Login/update: set the cookie
                 const newJwt = await new jose.SignJWT(request.session)
@@ -857,13 +904,14 @@ export default {
                     .setIssuedAt()
                     .setExpirationTime('24h')
                     .sign(JWT_SECRET);
-                response.headers.append('Set-Cookie', \`__session=\${newJwt}; HttpOnly; Path=/; SameSite=Strict; Secure\`);
+                response.headers.append('Set-Cookie', \`__session=\${newJwt}; HttpOnly; Path=/; SameSite=Strict\${secureAttr}\`);
             }
         }
 
         return response;
     },
-};"
+};
+"
 `;
 
 exports[`generator should generate main files that match their snapshots: keys.js 1`] = `
